@@ -5,74 +5,80 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <pthread.h>
+#include <ctype.h>
 
-#define NUM_THREADS 5
-
-int shared_client_socket;			/* shared socket */
-pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;	/* mutex lock for shared var */
-
-void *sendMessage(void *arg);
+void sendMessage(int);
 
 int main(void) {
-	pthread_t connection_threads[NUM_THREADS];	/* connection threads array */
 	short server_port;				
-	int t_id[NUM_THREADS];
 	
 	printf("Server Port: ");
 	scanf("%hd",&server_port);
+	getchar();	
 
-	/* === SOCKET ====================================================================================== */
-	/* Create an unbound socket */
-	shared_client_socket = socket(AF_INET, SOCK_STREAM, 0);
+	/* Create an unbound client_socket */
+	int client_socket = socket(AF_INET, SOCK_STREAM, 0);
 	
-	if (shared_client_socket == -1) {
-		perror("Failed creating client socket");
+	if (client_socket == -1) {
+		perror("Failed creating client client_socket");
 		exit(1);
 	}
 
-	/* Specify the server addres and port */ 
+	/* Specify the server ip addres and port */ 
+	char ip_str[INET_ADDRSTRLEN];
+	printf("\nServer ip: ");
+	fgets(ip_str, sizeof(ip_str), stdin);
+	
+	size_t length = strlen(ip_str);
+	if (length > 0 && ip_str[length - 1] == '\n') {
+		ip_str[length - 1] = '\0';
+	}
+
 	struct sockaddr_in server_address;
 	server_address.sin_family = AF_INET;
 	server_address.sin_port = htons(server_port);
-	server_address.sin_addr.s_addr = inet_addr("127.0.0.1");	/* loopback ip */
+	
+	if (inet_pton(AF_INET, ip_str, &(server_address.sin_addr)) <= 0) {
+		perror("ERROR");
+		exit(1);
+	}
 
-	/* Esrablish a connection with the server */
-	if(connect(shared_client_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1) {
+	/* Establish a connection with the server */
+	if(connect(client_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1) {
 		perror("Failed to connect with the server");
 		exit(1);
 	}
-	/* ================================================================================================= */
 	
-	
-	/* create connection threads */
-	for (int i = 0; i < NUM_THREADS; i++) {
-		t_id[i] = i;
-		pthread_create(&connection_threads[i], NULL, sendMessage, &t_id[i]);
-	}
+	sendMessage(client_socket);
+	close(client_socket);
 
-	/* wait/join connections threads */
-	for (int i = 0; i < NUM_THREADS; i++) {
-		pthread_join(connection_threads[i], NULL);
-	}
-
-	close(shared_client_socket);
 	return 0;
 }
 
-void *sendMessage(void *arg) {
-	int t_id = *(int*)arg;
-	char message[10];
+void sendMessage(int client_socket) {
+	while (1) {
+		int opt = 0;
+		printf("1. Send message\n");
+		printf("2. Exit\n");
+		printf("What do you want to do? :");
+		
+		if (scanf("%d", &opt) != 1) {
+			printf("\nInvalid input. Please enter a number.\n");
+		}
+		while(getchar() != '\n');
+		
+		printf("opt_val : %d\n",opt);
+		switch (opt) {
+			case 1:
+				char message[30];
+				printf("\nWrite your message :");
+				fgets(message, 20, stdin);
+				send(client_socket, message, strlen(message), 0);
+				break;
+			case 2: 
+				return;
+			defaut: break;
+		}		
 
-	for (int i = 0; i < 5; i++) {
-		/* Enter critical section */
-		pthread_mutex_lock(&m);
-		sprintf(message, "%d", i);
-		write(shared_client_socket, message, sizeof(message));
-		printf("[%d] thread message: %s\n", t_id, message);
-		pthread_mutex_unlock(&m);
-		/* Exit critical section */
 	}
-
-	pthread_exit(0);
 }

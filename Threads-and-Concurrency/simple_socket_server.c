@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <fcntl.h>
 #include <pthread.h>
 
 #define NUM_THREADS 2
@@ -35,6 +36,8 @@ int main(void) {
 		exit(1);
 	}
 
+	fcntl(server_socket, F_SETFL, O_NONBLOCK);	/* Set the socket to perform non-block operations
+
 	/* Specify the server addres and port */ 
 	struct sockaddr_in server_address;
 	server_address.sin_family = AF_INET;
@@ -63,7 +66,10 @@ int main(void) {
 	/* Infinite loop to accept more than one connection */
 	while (1) {
 		/* Accept queued connection */
+		do {
+			
 		t_connection[i].client_socket = accept(server_socket, (struct sockaddr *)&client_address, &client_address_len);
+		}while(t_connection[i].client_socket < 0);
 		t_connection[i].t_id = i;
 
 		if (t_connection[i].client_socket == -1) {
@@ -91,19 +97,20 @@ void *handleConnection (void *arg) {
 	client_socket_t t_connection = *(client_socket_t*)arg;
 	char buffer[1024];	/* buffer to storage the incoming message */
 	
-	pthread_mutex_lock(&m);
+	//pthread_mutex_lock(&m);
 	while (1) {
-		//pthread_mutex_lock(&m);
-		ssize_t bytes = read(t_connection.client_socket, buffer, sizeof(buffer));	/* read the message from connection */
-		//pthread_mutex_unlock(&m);
+		pthread_mutex_lock(&m);
+		ssize_t bytes_received = recv(t_connection.client_socket, buffer, sizeof(buffer), MSG_DONTWAIT);	/* read the message from connection */
+		pthread_mutex_unlock(&m);
 
-		if (bytes <= 0 ) {
+		if (bytes_received == 0 ) {
 			break;
+		}else if (bytes_received > 0) {
+			printf("[%d] thread message received: %s\n", t_connection.t_id, buffer);
 		}
-		printf("[%d] thread message received: %s\n", t_connection.t_id, buffer);
-		
+		usleep(100000);
 	}
-	pthread_mutex_unlock(&m);
+	//pthread_mutex_unlock(&m);
 	printf("Exit connection\n");
 	close(t_connection.client_socket);
 	pthread_exit(0);
